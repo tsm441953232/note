@@ -1,3 +1,15 @@
+### 三大范式和五大约束
+第一范式: 数据表中的每一列（每个字段）必须是不可拆分的最小单元，也就是确保每一列的原子性  
+第二范式: 满足1NF后，要求表中的所有列，都必须依赖于主键，而不能有任何一列与主键没有关系  
+第三范式: 必须先满足2NF，表中的每一列只与主键直接相关而不是间接相关  
+
+五大约束: 
++ primary key: 设置主键约束
++ unique: 唯一性约束
++ default: 默认值约束
++ not null: 非空约束
++ foreign key: 外键约束
+
 ### mysql关键字执行顺序
 from join on where group by having select distinct order by limit  
 查表构建虚拟表 过滤条件 分组 having 选择对应字段 去重 排序 个数
@@ -8,13 +20,14 @@ sql会通过分析器，对sql进行语法检查，判断sql是否正确，表�
 去储存引擎执行sql并得到结果  
 ![mysql逻辑架构](../static/image/mysql/mysql逻辑架构.jpeg)
 
+
 ### sql优化
 + 查询语句尽量走索引，不要使用 !=、<、> 等操作符号，会全表扫描
 + 使用explain + sql(select) 查看分析结果
 + 不直接使用select *，应具体到具体字段
-+ 创建索引
++ 创建索引(字符字段使用前缀索引)
 + 选择合适的字段类型长度
-+ 避免使用null
++ 避免使用null，不要在索引上做运算(id-1 = 9)，会导致索引失效
 + 进行水平切割和垂直切割(水平切割即相同结构分表，垂直切割即区分热点字段数据和非热点字段，不同结构分表，同一主键id)
 
 ### sql注入及防范
@@ -51,6 +64,25 @@ eg:
 不可重复读（read-committed）|	否|	是 | 是|
 可重复读（repeatable-read）|	否|否|是|
 串行化（serializable）|	否|	否	|否|
+
+#### MVCC版本控制
+版本链：在innoDB中，它的聚簇索引记录中包含了两个隐藏列(可见于undo日志)  
++ trx_id: 每次对某条记录进行改动时，都会把对应的事务id赋值给trx_id隐藏列
++ roll_pointer: 每次对某条记录进行改动时，这个隐藏列会存一个指针，可以通过这个指针找到该记录修改前的信息
+
+readView：(事务生成)
++ m_ids: 生成当前readView时活跃的读写事务列表
++ min_trx_id: 生成readView时最小的事务id
++ max_trx_id: 生成readView时系统分配给下一个事务的id
++ creator_trx_id: 生成该readView的事务id
+
+由此，我们知道当一个事务访问某条记录时，会根据readView判断该记录的某个版本是否可见
++ 当被访问记录的trx_id与creator_trx_id相同时，表示该事务访问自己修改过的记录，当前可见
++ 当被访问记录的trx_id比min_trx_id小时，表示该记录的事务在readView生成时已经提交，可见
++ 当被访问记录的trx_id比max_trx_id小时，表示该记录的事务在readView生成之后才开启，不可见
++ 当被访问记录的trx_id在min_trx_id和max_trx_id之间时，判断是否存在m_ids中，不存在即可见，存在即不可见
+
+生成readView时机: RC级别下在每次读取前都会生成，RR级别下事务第一次读取事务时生成
 
 ### 主键索引与聚集索引区别:  
 1. 主键索引强制表的完胜行，聚集索引用于查询数据  
